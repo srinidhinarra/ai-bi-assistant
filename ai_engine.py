@@ -14,11 +14,6 @@ MODELS = ["gemini-3.5-flash", "gemini-3.8-flash"]   # preferred first, fallback 
 MAX_ROWS = 200
 USE_LLM_SUMMARY = False   # False = 1 Gemini call per question (saves quota)
 
-client = genai.Client(
-    api_key=os.getenv("GEMINI_API_KEY"),
-    http_options=types.HttpOptions(timeout=30000),
-)
-
 # Layer 1: block destructive intent in the user's question before calling the LLM
 DESTRUCTIVE_INTENT = re.compile(
     r"\b(delete|drop|truncate|insert|update|alter|erase|wipe|modify|remove all)\b",
@@ -36,6 +31,7 @@ REVENUE = "SUM(Quantity * Unit_price - Discount_amount)"
 MONTHS = {"jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6}
 
 _sql_cache: dict = {}
+_client = None
 
 
 class UnsupportedQuestion(Exception):
@@ -51,6 +47,17 @@ class LLMUnavailable(Exception):
 
 
 # ---------------------------------------------------------------- LLM call
+def get_client():
+    """Create the Gemini client on first use, so importing this module never needs an API key."""
+    global _client
+    if _client is None:
+        _client = genai.Client(
+            api_key=os.getenv("GEMINI_API_KEY"),
+            http_options=types.HttpOptions(timeout=30000),
+        )
+    return _client
+
+
 def call_llm(prompt: str, json_mode: bool = False) -> str:
     config = types.GenerateContentConfig(
         temperature=0,
@@ -60,7 +67,7 @@ def call_llm(prompt: str, json_mode: bool = False) -> str:
     for round_no in range(2):
         for model_name in MODELS:
             try:
-                response = client.models.generate_content(
+                response = get_client().models.generate_content(
                     model=model_name, contents=prompt, config=config
                 )
                 return response.text
