@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Business Intelligence Assistant</title>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 900px; margin: 30px auto; padding: 0 16px; color: #222; }
+  h1 { font-size: 1.5rem; }
+  .row { display: flex; gap: 8px; }
+  input { flex: 1; padding: 10px; font-size: 1rem; }
+  button { padding: 10px 18px; font-size: 1rem; cursor: pointer; }
+  .chips button { margin: 8px 6px 0 0; padding: 4px 10px; font-size: .85rem; }
+  .card { border: 1px solid #ddd; border-radius: 8px; padding: 14px; margin-top: 16px; }
+  .error { border-color: #c00; color: #c00; }
+  code { display: block; background: #f4f4f4; padding: 8px; overflow-x: auto; white-space: pre-wrap; }
+  table { border-collapse: collapse; width: 100%; margin-top: 8px; }
+  th, td { border: 1px solid #ddd; padding: 6px 10px; text-align: left; }
+  th { background: #f0f0f0; }
+  .tag { font-size: .8rem; color: #666; }
+</style>
+</head>
+<body>
+<h1>AI Business Intelligence Assistant</h1>
+<div class="row">
+  <input id="q" placeholder="Ask a question about the sales data..." />
+  <button onclick="ask()">Ask</button>
+</div>
+<div class="chips" id="chips"></div>
+<div id="out"></div>
+
+<script>
+const examples = [
+  "What is the total revenue?",
+  "Which product generated the highest revenue?",
+  "What is the monthly revenue trend?",
+  "Which region generated the highest sales?",
+  "How did revenue change between April and May?"
+];
+const chips = document.getElementById("chips");
+examples.forEach(e => {
+  const b = document.createElement("button");
+  b.textContent = e;
+  b.onclick = () => { document.getElementById("q").value = e; ask(); };
+  chips.appendChild(b);
+});
+document.getElementById("q").addEventListener("keydown", e => { if (e.key === "Enter") ask(); });
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+async function ask() {
+  const q = document.getElementById("q").value;
+  const out = document.getElementById("out");
+  out.innerHTML = '<div class="card">Thinking...</div>';
+  try {
+    const res = await fetch("/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question: q })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      out.innerHTML = '<div class="card error"><b>Error ' + res.status + ':</b> ' + esc(data.detail) + '</div>';
+      return;
+    }
+    let html = '<div class="card"><h3>' + esc(data.answer) + '</h3>' +
+               '<div class="tag">Answer source: ' + esc(data.source) + '</div></div>';
+    html += '<div class="card"><b>SQL used</b><code>' + esc(data.sql) + '</code></div>';
+    const rows = data.supporting_data;
+    if (rows.length) {
+      const cols = Object.keys(rows[0]);
+      html += '<div class="card"><b>Supporting data</b><table><tr>' +
+        cols.map(c => '<th>' + esc(c) + '</th>').join("") + '</tr>' +
+        rows.map(r => '<tr>' + cols.map(c => '<td>' + esc(r[c]) + '</td>').join("") + '</tr>').join("") +
+        '</table></div>';
+    }
+    out.innerHTML = html;
+  } catch (err) {
+    out.innerHTML = '<div class="card error">Could not reach the server.</div>';
+  }
+}
+</script>
+</body>
+</html>
